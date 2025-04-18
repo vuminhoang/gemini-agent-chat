@@ -4,6 +4,15 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.tools import Tool
 from typing import Dict, List, Any, Optional
 
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+
+logger = logging.getLogger(__name__)
+
 
 class SmartGeminiAgent:
     def __init__(self):

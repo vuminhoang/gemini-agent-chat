@@ -22,9 +22,3 @@ async def chat_endpoint(req: QueryRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-# How to run swagger UI
-# cd gemini-agent-chat/services/assistant
-# uvicorn webhook:app --reload --host 0.0.0.0 --port 8000
-# paste the below url into your browse:
-# http://localhost:8000/docs
