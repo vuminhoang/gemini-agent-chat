@@ -21,6 +21,10 @@ class SmartGeminiAgent:
         self.api_key = config.get("api_key", "")
         self.model_name = config.get("model_name", "gemini-pro")
 
+        # keep 2 latest history
+        self.history: List[Dict[str, str]] = []
+        self.max_history = 2
+
         self.llm = ChatGoogleGenerativeAI(
             model=self.model_name,
             google_api_key=self.api_key,
@@ -136,46 +140,47 @@ TÀI LIỆU THAM KHẢO:
             return {"use_tool": False, "tool_name": "", "tool_input": ""}
 
     def response(
-        self,
-        query: str,
-        user_id: Optional[str] = None,
-        session: Optional[Dict[str, Any]] = None
+            self,
+            query: str,
+            user_id: Optional[str] = None,
+            session: Optional[Dict[str, Any]] = None
     ) -> str:
         try:
-            decision = self._decide_tool_use(query)
+            self.history.append({"role": "user", "content": query})
+            if len(self.history) > self.max_history:
+                self.history = self.history[-self.max_history:]
 
-            # metadata cho context
+            history_prompt = "\n".join(f"{m['role']}: {m['content']}" for m in self.history)
             meta = f"(User: {user_id})\nSession data: {session}\n" if user_id else ""
 
+            decision = self._decide_tool_use(query)
             if decision["use_tool"] and decision["tool_name"] in self.tool_dict:
                 tool_input = decision["tool_input"]
                 tool_result = self.tool_dict[decision["tool_name"]].func(tool_input)
-
-                final_prompt = (
-                    f"{meta}"
-                    f"Người dùng đã hỏi: \"{query}\"\n\n"
-                    f"Dựa trên câu hỏi, tôi đã tìm thấy thông tin sau:\n\n"
-                    f"{tool_result}\n\n"
-                    "Hãy trả lời người dùng một cách rõ ràng và đầy đủ, kết hợp thông tin trên để trả lời câu hỏi của họ.\n"
-                    "Đưa ra gợi ý học tập nếu phù hợp.\n"
+                prompt = (
+                    f"{meta}{history_prompt}\n\n"
+                    f">>> Kết quả từ tool `{decision['tool_name']}`:\n{tool_result}\n\n"
+                    "Hãy trả lời người dùng một cách rõ ràng và đầy đủ, kết hợp thông tin trên.\n"
                     "Trả lời tiếng Việt!"
                 )
-
-                response = self.llm.invoke(final_prompt)
-                return response.content
+                logger.info("Prompt: %s", prompt)
             else:
                 prompt = (
-                    f"{meta}"
-                    "Hãy trả lời câu hỏi sau đây một cách đầy đủ và hữu ích:\n\n"
-                    f"\"{query}\"\n"
-                    "Trả lời tiếng Việt!"
+                    f"{meta}{history_prompt}\n\n"
+                    f"User: \"{query}\"\n"
+                    "Assistant: "
                 )
+                logger.info("Prompt: %s", prompt)
 
-                response = self.llm.invoke(prompt)
-                return response.content
+            answer = self.llm.invoke(prompt).content
+            self.history.append({"role": "assistant", "content": answer})
+            if len(self.history) > self.max_history:
+                self.history = self.history[-self.max_history:]
+
+            return answer
 
         except Exception as e:
-            print(f"Error during agent execution: {e}")
+            logger.error(f"Error during agent execution: {e}")
             return f"Xin lỗi, đã xảy ra lỗi khi xử lý yêu cầu của bạn. Chi tiết lỗi: {str(e)}"
 
 
