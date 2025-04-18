@@ -27,6 +27,8 @@ uvicorn webhook:app --reload --host 0.0.0.0 --port 8000
 ```
 After that, click on http://localhost:8000/docs, you will see the Swagger UI.
 
+Click on Chat -> Try it out -> Enter the request body!
+
 
 
 
