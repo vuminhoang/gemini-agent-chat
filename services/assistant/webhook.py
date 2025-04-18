@@ -6,7 +6,11 @@ from providers.state import app_state
 app = FastAPI(title="SmartGeminiAgent API")
 agent = SmartGeminiAgent()
 
-@app.post("/chat", response_model=ChatResponse)
+@app.get("/health", tags=["Health"])
+async def health_check():
+    return {"status": "ok"}
+
+@app.post("/chat", response_model=ChatResponse, tags=["Chat"])
 async def chat_endpoint(req: QueryRequest):
     try:
         session = app_state.get_session(req.user_id)
