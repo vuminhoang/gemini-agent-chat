@@ -11,7 +11,6 @@ class SmartGeminiAgent:
 
         self.api_key = config.get("api_key", "")
         self.model_name = config.get("model_name", "gemini-pro")
-        print(self.model_name)
 
         self.llm = ChatGoogleGenerativeAI(
             model=self.model_name,
@@ -113,11 +112,9 @@ TÀI LIỆU THAM KHẢO:
         response = self.llm.invoke(tool_decision_prompt)
 
         try:
-            # Extract JSON from response
             response_text = response.content
             import json
 
-            # Remove any Markdown formatting if present
             if "```json" in response_text:
                 response_text = response_text.split("```json")[1].split("```")[0].strip()
             elif "```" in response_text:
@@ -129,37 +126,41 @@ TÀI LIỆU THAM KHẢO:
             print(f"Error parsing tool decision: {e}")
             return {"use_tool": False, "tool_name": "", "tool_input": ""}
 
-    def response(self, query: str) -> str:
+    def response(
+        self,
+        query: str,
+        user_id: Optional[str] = None,
+        session: Optional[Dict[str, Any]] = None
+    ) -> str:
         try:
             decision = self._decide_tool_use(query)
 
+            # metadata cho context
+            meta = f"(User: {user_id})\nSession data: {session}\n" if user_id else ""
+
             if decision["use_tool"] and decision["tool_name"] in self.tool_dict:
-                # Call the tool with the extracted input
                 tool_input = decision["tool_input"]
                 tool_result = self.tool_dict[decision["tool_name"]].func(tool_input)
 
-                # Generate response that incorporates tool result
-                final_prompt = f"""
-                Người dùng đã hỏi: "{query}"
-
-                Dựa trên câu hỏi, tôi đã tìm thấy thông tin sau:
-
-                {tool_result}
-
-                Hãy trả lời người dùng một cách rõ ràng và đầy đủ, kết hợp thông tin trên để trả lời câu hỏi của họ.
-                Đưa ra gợi ý học tập nếu phù hợp.
-                Trả lời tiếng việt!
-                """
+                final_prompt = (
+                    f"{meta}"
+                    f"Người dùng đã hỏi: \"{query}\"\n\n"
+                    f"Dựa trên câu hỏi, tôi đã tìm thấy thông tin sau:\n\n"
+                    f"{tool_result}\n\n"
+                    "Hãy trả lời người dùng một cách rõ ràng và đầy đủ, kết hợp thông tin trên để trả lời câu hỏi của họ.\n"
+                    "Đưa ra gợi ý học tập nếu phù hợp.\n"
+                    "Trả lời tiếng Việt!"
+                )
 
                 response = self.llm.invoke(final_prompt)
                 return response.content
             else:
-                prompt = f"""
-                Hãy trả lời câu hỏi sau đây một cách đầy đủ và hữu ích:
-
-                "{query}"
-                Trả lời bằng tiếng Việt!
-                """
+                prompt = (
+                    f"{meta}"
+                    "Hãy trả lời câu hỏi sau đây một cách đầy đủ và hữu ích:\n\n"
+                    f"\"{query}\"\n"
+                    "Trả lời tiếng Việt!"
+                )
 
                 response = self.llm.invoke(prompt)
                 return response.content
@@ -173,7 +174,6 @@ TÀI LIỆU THAM KHẢO:
 if __name__ == "__main__":
     agent = SmartGeminiAgent()
 
-    # Example query and response
     question = "Tôi cần hướng dẫn về bài học Đại số tuyến tính"
     print(f"Câu hỏi: {question}")
-    print(f"Trả lời: {agent.response(question)}")
+    print(f"Trả lời: {agent.response(question, user_id='alice', session={})}")
