@@ -27,6 +27,15 @@ uvicorn webhook:app --reload --host 0.0.0.0 --port 8000
 ```
 After that, click on http://localhost:8000/docs, you will see the Swagger UI.
 
+### 5. Project structure
+gemini-agent-chat/
+│
+├── notebooks/                 # Notebook demos and testing
+└── services/
+    └── assistant/             # Main assistant service
+        ├── webhook.py         # FastAPI entrypoint
+        ├── dev.toml           # Configuration file (user-defined)
+        └── dev.toml.example   # Example config template
 
 
 
