@@ -33,10 +33,10 @@ Click on Chat -> Try it out -> Enter the request body!
 ### 5. Run Docker
 From the root folder of the project, run the following command to start the Docker containers:
 ```bash
-docker-compose -f docker-compose.dev.yml -p gemini up --build
-docker-compose -f docker-compose.dev.yml -p gemini down # stop the containers
-docker-compose -f docker-compose.dev.yml -p gemini up # start the containers
-docker-compose -f docker-compose.dev.yml -p gemini up -d # start the containers in detached mode
+docker-compose -f docker-compose.dev.yml -p gemini-agent up --build # build the containers
+docker-compose -f docker-compose.dev.yml -p gemini-agent down # stop the containers
+docker-compose -f docker-compose.dev.yml -p gemini-agent up # start the containers
+docker-compose -f docker-compose.dev.yml -p gemini-agent up -d # start the containers in detached mode
 ```
 
 

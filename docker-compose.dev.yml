@@ -6,6 +6,8 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./services/assistant/configs:/app/configs
+      - ./services/assistant:/app
     environment:
       - ENV=dev
+
+

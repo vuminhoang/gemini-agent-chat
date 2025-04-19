@@ -173,6 +173,7 @@ TÀI LIỆU THAM KHẢO:
                 logger.info("Prompt: %s", prompt)
 
             answer = self.llm.invoke(prompt).content
+            logger.info("Answer: %s", answer)
             self.history.append({"role": "assistant", "content": answer})
             if len(self.history) > self.max_history:
                 self.history = self.history[-self.max_history:]
