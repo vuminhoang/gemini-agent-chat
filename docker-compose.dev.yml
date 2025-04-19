@@ -1,0 +1,11 @@
+services:
+  assistant:
+    build:
+      context: .
+      dockerfile: services/assistant/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./services/assistant/configs:/app/configs
+    environment:
+      - ENV=dev
