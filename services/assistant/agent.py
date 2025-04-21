@@ -3,8 +3,8 @@ from pathlib import Path
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.tools import Tool
 from typing import Dict, List, Any, Optional
-
 import logging
+import prompt
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,8 +21,8 @@ class SmartGeminiAgent:
         self.api_key = config.get("api_key", "")
         self.model_name = config.get("model_name", "gemini-pro")
 
-        # keep 2 latest history
-        self.history: List[Dict[str, str]] = []
+        # Lưu trữ lịch sử theo từng user_id
+        self.user_histories: Dict[str, List[Dict[str, str]]] = {}
         self.max_history = 2
 
         self.llm = ChatGoogleGenerativeAI(
@@ -38,9 +38,7 @@ class SmartGeminiAgent:
         self.tool_dict = {tool.name: tool for tool in self.tools}
 
         # Tool descriptions for prompt
-        self.tool_descriptions = "\n".join([
-            f"- {tool.name}: {tool.description}" for tool in self.tools
-        ])
+        self.tool_descriptions = prompt.get_tool_descriptions(self.tools)
 
     def _load_config(self) -> Dict:
         """Lấy phần config gemini trong config toml"""
@@ -91,36 +89,18 @@ TÀI LIỆU THAM KHẢO:
             Tool(
                 name="get_syllabus",
                 func=get_syllabus,
-                description="Sử dụng khi người dùng hỏi về hướng dẫn giải bài học nào đó"
+                description="Sử dụng khi người dùng hỏi về hướng dẫn giải bài học nào đó, thông tin về giáo trình hoặc lộ trình học "
             )
         ]
 
         return tools
 
     def _decide_tool_use(self, query: str) -> dict:
-        """
-        Let the LLM decide if a tool should be used.
-
-        Returns:
-            Dict with decision info
-        """
-        tool_decision_prompt = f"""
-        Câu hỏi của người dùng: "{query}"
-
-        Bạn có quyền truy cập vào các công cụ sau:
-        {self.tool_descriptions}
-
-        Hãy quyết định xem có nên sử dụng công cụ nào không để trả lời câu hỏi trên.
-
-        Chỉ trả lời theo định dạng JSON chính xác sau:
-        {{
-            "use_tool": true/false,
-            "tool_name": "tên công cụ nếu cần sử dụng, không có thì để trống",
-            "tool_input": "thông tin đầu vào cho công cụ nếu cần, không có thì để trống"
-        }}
-
-        Chỉ trả lời JSON, không thêm giải thích.
-        """
+        tool_decision_prompt = prompt.TOOL_DECISION_PROMPT.format(
+            system_prompt=prompt.SYSTEM_PROMPT,
+            query=query,
+            tool_descriptions=self.tool_descriptions
+        )
 
         response = self.llm.invoke(tool_decision_prompt)
 
@@ -139,6 +119,23 @@ TÀI LIỆU THAM KHẢO:
             print(f"Error parsing tool decision: {e}")
             return {"use_tool": False, "tool_name": "", "tool_input": ""}
 
+    def get_user_history(self, user_id: str) -> List[Dict[str, str]]:
+        """
+        get history of user by user_id
+        """
+        if user_id not in self.user_histories:
+            self.user_histories[user_id] = []
+        return self.user_histories[user_id]
+
+    def update_user_history(self, user_id: str, role: str, content: str):
+        if user_id not in self.user_histories:
+            self.user_histories[user_id] = []
+
+        self.user_histories[user_id].append({"role": role, "content": content})
+
+        if len(self.user_histories[user_id]) > self.max_history * 2:
+            self.user_histories[user_id] = self.user_histories[user_id][-(self.max_history * 2):]
+
     def response(
             self,
             query: str,
@@ -146,37 +143,46 @@ TÀI LIỆU THAM KHẢO:
             session: Optional[Dict[str, Any]] = None
     ) -> str:
         try:
-            self.history.append({"role": "user", "content": query})
-            if len(self.history) > self.max_history:
-                self.history = self.history[-self.max_history:]
+            if not user_id:
+                user_id = "default_user"
 
-            history_prompt = "\n".join(f"{m['role']}: {m['content']}" for m in self.history)
-            meta = f"(User: {user_id})\nSession data: {session}\n" if user_id else ""
+            history = self.get_user_history(user_id)
+
+            self.update_user_history(user_id, "user", query)
+
+            meta = f"(User: {user_id})\nSession data: {session}\n" if session else ""
+
+            history_text = prompt.build_history_text(history)
 
             decision = self._decide_tool_use(query)
             if decision["use_tool"] and decision["tool_name"] in self.tool_dict:
                 tool_input = decision["tool_input"]
                 tool_result = self.tool_dict[decision["tool_name"]].func(tool_input)
-                prompt = (
-                    f"{meta}{history_prompt}\n\n"
-                    f">>> Kết quả từ tool `{decision['tool_name']}`:\n{tool_result}\n\n"
-                    "Hãy trả lời người dùng một cách rõ ràng và đầy đủ, kết hợp thông tin trên.\n"
-                    "Trả lời tiếng Việt!"
-                )
-                logger.info("Prompt: %s", prompt)
-            else:
-                prompt = (
-                    f"{meta}{history_prompt}\n\n"
-                    f"User: \"{query}\"\n"
-                    "Assistant: "
-                )
-                logger.info("Prompt: %s", prompt)
 
-            answer = self.llm.invoke(prompt).content
+                # Sử dụng prompt với tool
+                prompt_text = prompt.TOOL_USE_PROMPT.format(
+                    system_prompt=prompt.SYSTEM_PROMPT,
+                    meta=meta,
+                    history=history_text,
+                    tool_name=decision["tool_name"],
+                    tool_result=tool_result
+                )
+                logger.info("Prompt: %s", prompt_text)
+            else:
+                # Sử dụng prompt thông thường
+                prompt_text = prompt.NORMAL_PROMPT.format(
+                    system_prompt=prompt.SYSTEM_PROMPT,
+                    meta=meta,
+                    history=history_text,
+                    query=query
+                )
+                logger.info("Prompt: %s", prompt_text)
+
+            answer = self.llm.invoke(prompt_text).content
             logger.info("Answer: %s", answer)
-            self.history.append({"role": "assistant", "content": answer})
-            if len(self.history) > self.max_history:
-                self.history = self.history[-self.max_history:]
+
+            # Thêm câu trả lời vào lịch sử
+            self.update_user_history(user_id, "assistant", answer)
 
             return answer
 
@@ -189,6 +195,14 @@ TÀI LIỆU THAM KHẢO:
 if __name__ == "__main__":
     agent = SmartGeminiAgent()
 
-    question = "Tôi cần hướng dẫn về bài học Đại số tuyến tính"
-    print(f"Câu hỏi: {question}")
-    print(f"Trả lời: {agent.response(question, user_id='alice', session={})}")
+    question1 = "Tôi cần hướng dẫn về bài học Đại số tuyến tính"
+    print(f"Alice hỏi: {question1}")
+    print(f"Trả lời: {agent.response(question1, user_id='alice', session={})}")
+
+    question2 = "Tôi muốn biết thêm về Giải tích"
+    print(f"Bob hỏi: {question2}")
+    print(f"Trả lời: {agent.response(question2, user_id='bob', session={})}")
+
+    question3 = "Bạn có thể giải thích thêm về ma trận không?"
+    print(f"Alice hỏi: {question3}")
+    print(f"Trả lời: {agent.response(question3, user_id='alice', session={})}")
