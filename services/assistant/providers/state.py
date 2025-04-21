@@ -14,13 +14,11 @@ class AppState:
         data = r.get(self._key(user_id))
         if data:
             return json.loads(data)
-        # tạo khung mặc định
         return {"history": []}
 
     def save_session(self, user_id: str, session: dict[str, Any]):
         r.set(self._key(user_id), json.dumps(session), ex=86400)  # TTL 24 h
 
-    # tiện ích cho agent
     def append_history(self, user_id: str, role: str, content: str):
         with _lock:
             session = self.get_session(user_id)

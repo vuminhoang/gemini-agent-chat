@@ -31,12 +31,10 @@ class SmartGeminiAgent:
         )
         self._llm_lock = threading.Lock()
 
-        # ---------- tool setup ----------
         self.tools = self._setup_tools()
         self.tool_dict = {t.name: t for t in self.tools}
         self.tool_descriptions = prompt.get_tool_descriptions(self.tools)
 
-    # ------------------- private helpers -------------------
     def _load_config(self) -> Dict:
         try:
             with open(Path("configs/dev.toml"), "rb") as f:
@@ -85,7 +83,6 @@ class SmartGeminiAgent:
         except Exception:
             return {"use_tool": False, "tool_name": "", "tool_input": ""}
 
-    # ------------------- public API -------------------
     def response(
         self,
         query: str,
@@ -93,14 +90,12 @@ class SmartGeminiAgent:
         session: Optional[Dict[str, Any]] = None
     ) -> str:
 
-        # --- 1. lấy / cập nhật session ---
         session = session or app_state.get_session(user_id)
         app_state.append_history(user_id, "user", query)
 
         history_text = prompt.build_history_text(session["history"])
         meta = f"(User: {user_id})\n"  # session data nhỏ có thể thêm nếu cần
 
-        # --- 2. quyết định tool ---
         decision = self._decide_tool_use(query)
         if decision["use_tool"] and decision["tool_name"] in self.tool_dict:
             tool_result = self.tool_dict[decision["tool_name"]].func(
@@ -122,11 +117,9 @@ class SmartGeminiAgent:
             )
         logger.info("Prompt: %s", prompt_txt)
 
-        # --- 3. gọi model ---
         with self._llm_lock:
             answer = self.llm.invoke(prompt_txt).content
         logger.info("Answer: %s", answer)
 
-        # --- 4. lưu lại ---
         app_state.append_history(user_id, "assistant", answer)
         return answer
