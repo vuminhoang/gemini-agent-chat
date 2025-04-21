@@ -10,19 +10,18 @@ agent = SmartGeminiAgent()
 async def health_check():
     return {"status": "ok"}
 
-@app.post("/chat", response_model=ChatResponse, tags=["Chat"])
+@app.post("/chat", response_model=ChatResponse, tags=["StudyWithMe"])
 async def chat_endpoint(req: QueryRequest):
     try:
+        answer = agent.response(req.query, user_id=req.user_id)
+
         session = app_state.get_session(req.user_id)
-        answer = agent.response(req.query, user_id=req.user_id, session=session)
-
         session["last_answer"] = answer
+        app_state.save_session(req.user_id, session)
 
-        return ChatResponse(
-            user_id=req.user_id,
-            query=req.query,
-            response=answer
-        )
+        return ChatResponse(user_id=req.user_id,
+                            query=req.query,
+                            response=answer)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

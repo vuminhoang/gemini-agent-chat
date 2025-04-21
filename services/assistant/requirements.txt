@@ -6,3 +6,4 @@ langchain
 fastapi
 uvicorn
 pydantic
+redis>=5.0
